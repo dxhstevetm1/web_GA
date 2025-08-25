@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facebook Scraper Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="url"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        .results {
+            margin-top: 20px;
+            display: none;
+        }
+        .comment {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+        .user-info {
+            font-weight: bold;
+            color: #007bff;
+        }
+        .timestamp {
+            color: #666;
+            font-size: 0.9em;
+        }
+        .error {
+            color: red;
+            padding: 10px;
+            background: #ffe6e6;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .success {
+            color: green;
+            padding: 10px;
+            background: #e6ffe6;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Facebook Scraper Test</h1>
+        
+        <div class="input-group">
+            <label for="postUrl">URL Bài viết Facebook:</label>
+            <input type="url" id="postUrl" placeholder="https://www.facebook.com/username/posts/123456789">
+        </div>
+        
+        <button onclick="testScrape()">Test Scrape</button>
+        <button onclick="testHealth()">Test Health</button>
+        
+        <div class="loading" id="loading">
+            <p>Đang xử lý...</p>
+        </div>
+        
+        <div class="results" id="results">
+            <h3>Kết quả:</h3>
+            <div id="resultContent"></div>
+        </div>
+    </div>
+
+    <script>
+        async function testScrape() {
+            const postUrl = document.getElementById('postUrl').value.trim();
+            
+            if (!postUrl) {
+                showError('Vui lòng nhập URL bài viết');
+                return;
+            }
+            
+            showLoading(true);
+            hideResults();
+            
+            try {
+                const response = await fetch('/api/scrape', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ postUrl })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    displayResults(result);
+                    showSuccess(`Đã scrape thành công ${result.totalComments} comment`);
+                } else {
+                    showError(`Lỗi: ${result.error}`);
+                }
+            } catch (error) {
+                showError('Lỗi kết nối server');
+                console.error('Error:', error);
+            } finally {
+                showLoading(false);
+            }
+        }
+        
+        async function testHealth() {
+            try {
+                const response = await fetch('/api/health');
+                const result = await response.json();
+                showSuccess(`Health check: ${result.message}`);
+                console.log('Health result:', result);
+            } catch (error) {
+                showError('Health check failed');
+                console.error('Error:', error);
+            }
+        }
+        
+        function displayResults(result) {
+            const container = document.getElementById('resultContent');
+            
+            let html = `
+                <p><strong>Tổng số comment:</strong> ${result.totalComments}</p>
+                <p><strong>URL:</strong> ${result.postUrl}</p>
+                <hr>
+                <h4>Danh sách comment:</h4>
+            `;
+            
+            result.comments.forEach((comment, index) => {
+                html += `
+                    <div class="comment">
+                        <div class="user-info">${comment.userName}</div>
+                        <div class="timestamp">${comment.timestamp}</div>
+                        <p>${comment.text}</p>
+                        <small>Profile: <a href="${comment.userProfile}" target="_blank">${comment.userProfile}</a></small>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+            showResults();
+        }
+        
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+        }
+        
+        function showResults() {
+            document.getElementById('results').style.display = 'block';
+        }
+        
+        function hideResults() {
+            document.getElementById('results').style.display = 'none';
+        }
+        
+        function showError(message) {
+            const div = document.createElement('div');
+            div.className = 'error';
+            div.textContent = message;
+            document.querySelector('.container').appendChild(div);
+            setTimeout(() => div.remove(), 5000);
+        }
+        
+        function showSuccess(message) {
+            const div = document.createElement('div');
+            div.className = 'success';
+            div.textContent = message;
+            document.querySelector('.container').appendChild(div);
+            setTimeout(() => div.remove(), 5000);
+        }
+        
+        // Enter key to submit
+        document.getElementById('postUrl').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                testScrape();
+            }
+        });
+    </script>
+</body>
+</html>
