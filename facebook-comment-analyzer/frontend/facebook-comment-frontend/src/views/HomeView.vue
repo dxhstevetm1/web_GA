@@ -38,12 +38,30 @@
           <small class="form-text">Leave empty if access token is configured in backend</small>
         </div>
 
+        <div class="form-group">
+          <label for="postUrl">Public Post URL (no token needed):</label>
+          <input 
+            id="postUrl"
+            v-model="postUrl" 
+            type="text" 
+            placeholder="https://www.facebook.com/... or https://www.facebook.com/groups/.../permalink/..."
+            class="form-control"
+          />
+          <div style="margin-top:0.5rem; display:flex; gap:0.5rem; align-items:center;">
+            <input id="checkShare" type="checkbox" v-model="checkShare" />
+            <label for="checkShare">Try detect if commenters shared the post</label>
+          </div>
+        </div>
+
         <div class="button-group">
           <button @click="getPost" :disabled="loading" class="btn btn-primary">
             {{ loading ? 'Loading...' : 'Get Post Info' }}
           </button>
           <button @click="analyzeComments" :disabled="loading || !postId" class="btn btn-success">
             {{ loading ? 'Analyzing...' : 'Analyze Comments' }}
+          </button>
+          <button @click="scrapeComments" :disabled="loading || !postUrl" class="btn btn-secondary">
+            {{ loading ? 'Scraping...' : 'Scrape Comments by URL' }}
           </button>
         </div>
       </div>
@@ -103,7 +121,7 @@
         <div class="comments-list">
           <div 
             v-for="comment in filteredAndSortedComments" 
-            :key="comment.id" 
+            :key="comment.id || (comment.from.name + comment.created_time)" 
             class="comment-card"
             :class="{ 
               'shared-post': comment.hasSharedPost,
@@ -113,7 +131,10 @@
             <div class="comment-header">
               <img :src="comment.from.picture?.data?.url || '/default-avatar.png'" alt="Profile" class="profile-pic" />
               <div class="comment-meta">
-                <h5>{{ comment.from.name }}</h5>
+                <h5>
+                  <a v-if="comment.from.profileUrl" :href="comment.from.profileUrl" target="_blank" rel="noopener">{{ comment.from.name }}</a>
+                  <span v-else>{{ comment.from.name }}</span>
+                </h5>
                 <p>{{ formatDate(comment.created_time) }}</p>
                 <div class="comment-badges">
                   <span v-if="comment.hasSharedPost" class="badge shared">Shared Post</span>
@@ -167,6 +188,8 @@ export default {
   setup() {
     const postType = ref('regular')
     const postId = ref('')
+    const postUrl = ref('')
+    const checkShare = ref(false)
     const accessToken = ref('')
     const post = ref(null)
     const comments = ref([])
@@ -183,8 +206,8 @@ export default {
       // Filter by search term
       if (searchTerm.value) {
         filtered = filtered.filter(comment => 
-          comment.message.toLowerCase().includes(searchTerm.value.toLowerCase()) ||
-          comment.from.name.toLowerCase().includes(searchTerm.value.toLowerCase())
+          (comment.message || '').toLowerCase().includes(searchTerm.value.toLowerCase()) ||
+          (comment.from?.name || '').toLowerCase().includes(searchTerm.value.toLowerCase())
         )
       }
 
@@ -207,9 +230,9 @@ export default {
           case 'created_time':
             return new Date(a.created_time) - new Date(b.created_time)
           case 'like_count':
-            return b.like_count - a.like_count
+            return (b.like_count || 0) - (a.like_count || 0)
           case 'hasSharedPost':
-            return b.hasSharedPost - a.hasSharedPost
+            return (b.hasSharedPost ? 1 : 0) - (a.hasSharedPost ? 1 : 0)
           case 'groupRole':
             const roleOrder = { admin: 3, moderator: 2, member: 1 }
             return (roleOrder[b.groupRole] || 0) - (roleOrder[a.groupRole] || 0)
@@ -267,8 +290,30 @@ export default {
       }
     }
 
+    const scrapeComments = async () => {
+      if (!postUrl.value) {
+        error.value = 'Please enter Public Post URL'
+        return
+      }
+      loading.value = true
+      error.value = ''
+      post.value = null
+      try {
+        const response = await facebookService.scrapeComments(postUrl.value, checkShare.value)
+        comments.value = response
+      } catch (err) {
+        error.value = err.message || 'Failed to scrape comments'
+      } finally {
+        loading.value = false
+      }
+    }
+
     const formatDate = (dateString) => {
-      return new Date(dateString).toLocaleString()
+      try {
+        return new Date(dateString).toLocaleString()
+      } catch {
+        return String(dateString)
+      }
     }
 
     const loadConfig = async () => {
@@ -286,6 +331,8 @@ export default {
     return {
       postType,
       postId,
+      postUrl,
+      checkShare,
       accessToken,
       post,
       comments,
@@ -298,6 +345,7 @@ export default {
       filteredAndSortedComments,
       getPost,
       analyzeComments,
+      scrapeComments,
       formatDate
     }
   }
@@ -398,53 +446,94 @@ export default {
   color: white;
 }
 
+.btn-secondary {
+  background: #6c757d;
+  color: white;
+}
+
 .btn-success:hover:not(:disabled) {
   background: #218838;
 }
 
-.post-section, .comments-section, .config-section {
+.post-section { margin-bottom: 1.5rem; }
+.post-card { background: #fff; border: 1px solid #eef2f7; border-radius: 8px; padding: 1rem; }
+.post-header { display: flex; gap: 0.75rem; align-items: center; }
+.post-stats span { margin-right: 0.75rem; }
+
+.comments-section {
   background: white;
-  padding: 2rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-  margin-bottom: 2rem;
-}
-
-.post-card {
-  border: 1px solid #e1e8ed;
-  border-radius: 8px;
   padding: 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
 
-.post-header {
+.comments-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   margin-bottom: 1rem;
 }
 
+.filters {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.search-input, .sort-select, .filter-select {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #e1e8ed;
+  border-radius: 4px;
+}
+
+.comments-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1rem;
+}
+
+.comment-card {
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+  padding: 1rem;
+  background: #fff;
+}
+
+.comment-card.shared-post {
+  border-color: #d1f7c4;
+}
+
+.comment-card.group-member {
+  border-color: #cfe4ff;
+}
+
+.comment-header {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
 .profile-pic {
-  width: 50px;
-  height: 50px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  margin-right: 1rem;
   object-fit: cover;
 }
 
-.post-meta h4 {
+.comment-meta h5 {
   margin: 0;
-  color: #2c3e50;
 }
 
-.post-meta p {
-  margin: 0;
-  color: #7f8c8d;
-  font-size: 0.9rem;
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  margin-right: 0.4rem;
 }
 
-.group-info {
-  color: #667eea !important;
-  font-weight: 500;
-}
+.badge.shared { background: #e8f5e9; color: #2e7d32; }
+.badge.member { background: #e3f2fd; color: #1565c0; }
+.badge.role { background: #fff8e1; color: #ef6c00; }
 
 .post-content {
   margin-bottom: 1rem;
@@ -456,101 +545,6 @@ export default {
   color: #7f8c8d;
   font-size: 0.9rem;
   flex-wrap: wrap;
-}
-
-.comments-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
-  flex-wrap: wrap;
-  gap: 1rem;
-}
-
-.filters {
-  display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.search-input, .sort-select, .filter-select {
-  padding: 0.5rem;
-  border: 1px solid #e1e8ed;
-  border-radius: 4px;
-  font-size: 0.9rem;
-}
-
-.comments-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.comment-card {
-  border: 1px solid #e1e8ed;
-  border-radius: 8px;
-  padding: 1.5rem;
-  transition: all 0.3s;
-}
-
-.comment-card:hover {
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
-
-.comment-card.shared-post {
-  border-left: 4px solid #28a745;
-  background-color: #f8fff9;
-}
-
-.comment-card.group-member {
-  border-right: 4px solid #667eea;
-}
-
-.comment-header {
-  display: flex;
-  align-items: center;
-  margin-bottom: 1rem;
-  position: relative;
-}
-
-.comment-meta h5 {
-  margin: 0;
-  color: #2c3e50;
-}
-
-.comment-meta p {
-  margin: 0;
-  color: #7f8c8d;
-  font-size: 0.9rem;
-}
-
-.comment-badges {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.badge {
-  padding: 0.25rem 0.5rem;
-  border-radius: 12px;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.badge.shared {
-  background: #28a745;
-  color: white;
-}
-
-.badge.member {
-  background: #667eea;
-  color: white;
-}
-
-.badge.role {
-  background: #ffc107;
-  color: #212529;
 }
 
 .comment-content {

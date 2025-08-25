@@ -156,4 +156,14 @@ export const facebookService = {
   async getConfig() {
     return await apiClient.get('/config')
   }
+,
+  /**
+   * Scrape comments from a public Facebook post URL (supports public group posts)
+   * @param {string} postUrl - Public Facebook post URL
+   * @param {boolean} checkShare - Whether to try detect if commenters shared the post
+   * @returns {Promise<Array>} Array of scraped comments
+   */
+  async scrapeComments(postUrl, checkShare = false) {
+    return await apiClient.post('/scrape-comments', { postUrl, checkShare })
+  }
 }
