@@ -2,8 +2,15 @@
   <div class="home">
     <div class="container">
       <div class="header-section">
-        <h2>Facebook Comment Analyzer</h2>
+        <h2>📊 Facebook Comment Analyzer</h2>
         <p class="subtitle">Analyze comments from Facebook posts and track user engagement</p>
+        <div class="mode-toggle">
+          <span class="btn btn-primary active">📊 API Mode</span>
+          <router-link to="/scraping" class="btn btn-outline">🕷️ Web Scraping</router-link>
+        </div>
+        <div class="mode-info">
+          <p><strong>API Mode:</strong> Uses Facebook Graph API (requires access token)</p>
+        </div>
       </div>
 
       <div class="input-section">
@@ -594,6 +601,44 @@ export default {
 
 .config-info p {
   margin: 0.5rem 0;
+}
+
+.mode-toggle {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin: 1.5rem 0;
+}
+
+.mode-toggle .btn {
+  padding: 0.75rem 1.5rem;
+  text-decoration: none;
+  border-radius: 25px;
+  transition: all 0.3s ease;
+  border: 2px solid transparent;
+}
+
+.mode-toggle .active {
+  background: #667eea;
+  color: white;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+}
+
+.mode-toggle .btn-outline {
+  background: transparent;
+  border: 2px solid #667eea;
+  color: #667eea;
+}
+
+.mode-toggle .btn-outline:hover {
+  background: #667eea;
+  color: white;
+}
+
+.mode-info {
+  text-align: center;
+  margin-top: 1rem;
+  opacity: 0.8;
 }
 
 @media (max-width: 768px) {
