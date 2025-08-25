@@ -8,18 +8,20 @@ namespace FacebookCommentAnalyzer.API.Services
     {
         private readonly HttpClient _httpClient;
         private readonly ILogger<FacebookService> _logger;
+        private readonly FacebookApiConfig _config;
 
-        public FacebookService(HttpClient httpClient, ILogger<FacebookService> logger)
+        public FacebookService(HttpClient httpClient, ILogger<FacebookService> logger, FacebookApiConfig config)
         {
             _httpClient = httpClient;
             _logger = logger;
+            _config = config;
         }
 
         public async Task<FacebookPost?> GetPostAsync(string postId, string accessToken)
         {
             try
             {
-                var url = $"https://graph.facebook.com/v18.0/{postId}?fields=id,message,created_time,updated_time,permalink_url,from&access_token={accessToken}";
+                var url = $"{_config.BaseUrl}/{postId}?fields=id,message,created_time,updated_time,permalink_url,from,likes,shares&access_token={accessToken}";
                 var response = await _httpClient.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)
@@ -38,10 +40,33 @@ namespace FacebookCommentAnalyzer.API.Services
             }
         }
 
+        public async Task<FacebookGroupPost?> GetGroupPostAsync(string postId, string accessToken)
+        {
+            try
+            {
+                var url = $"{_config.BaseUrl}/{postId}?fields=id,message,created_time,updated_time,permalink_url,from,likes,shares,group,type,status_type&access_token={accessToken}";
+                var response = await _httpClient.GetAsync(url);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    return JsonConvert.DeserializeObject<FacebookGroupPost>(content);
+                }
+                
+                _logger.LogError($"Failed to get group post: {response.StatusCode} - {response.ReasonPhrase}");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting Facebook group post");
+                return null;
+            }
+        }
+
         public async Task<List<FacebookComment>> GetAllCommentsAsync(string postId, string accessToken)
         {
             var allComments = new List<FacebookComment>();
-            var nextUrl = $"https://graph.facebook.com/v18.0/{postId}/comments?fields=id,message,from,created_time,comment_count,like_count,is_hidden,can_reply&access_token={accessToken}";
+            var nextUrl = $"{_config.BaseUrl}/{postId}/comments?fields={_config.DefaultFields}&access_token={accessToken}";
 
             try
             {
@@ -76,13 +101,77 @@ namespace FacebookCommentAnalyzer.API.Services
             return allComments.OrderBy(c => c.CreatedTime).ToList();
         }
 
+        public async Task<List<FacebookComment>> GetGroupPostCommentsAsync(string postId, string accessToken)
+        {
+            var allComments = new List<FacebookComment>();
+            var nextUrl = $"{_config.BaseUrl}/{postId}/comments?fields={_config.DefaultFields}&access_token={accessToken}";
+
+            try
+            {
+                while (!string.IsNullOrEmpty(nextUrl))
+                {
+                    var response = await _httpClient.GetAsync(nextUrl);
+                    
+                    if (response.IsSuccessStatusCode)
+                    {
+                        var content = await response.Content.ReadAsStringAsync();
+                        var commentsResponse = JsonConvert.DeserializeObject<FacebookCommentsResponse>(content);
+                        
+                        if (commentsResponse?.Data != null)
+                        {
+                            // Get group info for each comment
+                            foreach (var comment in commentsResponse.Data)
+                            {
+                                var groupPost = await GetGroupPostAsync(postId, accessToken);
+                                if (groupPost?.Group != null)
+                                {
+                                    comment.IsGroupMember = await IsUserGroupMember(comment.From.Id, groupPost.Group.Id, accessToken);
+                                    comment.GroupRole = await GetUserGroupRole(comment.From.Id, groupPost.Group.Id, accessToken);
+                                }
+                            }
+                            
+                            allComments.AddRange(commentsResponse.Data);
+                        }
+                        
+                        nextUrl = commentsResponse?.Paging?.Next;
+                    }
+                    else
+                    {
+                        _logger.LogError($"Failed to get group post comments: {response.StatusCode} - {response.ReasonPhrase}");
+                        break;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting Facebook group post comments");
+            }
+
+            return allComments.OrderBy(c => c.CreatedTime).ToList();
+        }
+
         public async Task<bool> CheckUserSharedPost(string userId, string postUrl, string accessToken)
         {
             try
             {
-                // This is a simplified check - in reality, you'd need to check the user's posts
-                // for shares of the specific post URL
-                var url = $"https://graph.facebook.com/v18.0/{userId}/posts?fields=message,link&access_token={accessToken}";
+                var shareAnalysis = await AnalyzeUserShareActivity(userId, postUrl, accessToken);
+                return shareAnalysis.HasShared;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking if user shared post");
+                return false;
+            }
+        }
+
+        public async Task<ShareAnalysisResult> AnalyzeUserShareActivity(string userId, string postUrl, string accessToken)
+        {
+            var result = new ShareAnalysisResult();
+            
+            try
+            {
+                // Get user's posts and check for shares
+                var url = $"{_config.BaseUrl}/{userId}/posts?fields=id,message,link,created_time,likes,comments,privacy&access_token={accessToken}";
                 var response = await _httpClient.GetAsync(url);
                 
                 if (response.IsSuccessStatusCode)
@@ -90,15 +179,55 @@ namespace FacebookCommentAnalyzer.API.Services
                     var content = await response.Content.ReadAsStringAsync();
                     var postsResponse = JsonConvert.DeserializeObject<dynamic>(content);
                     
-                    // Check if any post contains the original post URL
                     if (postsResponse?.data != null)
                     {
                         foreach (var post in postsResponse.data)
                         {
                             var message = post.message?.ToString() ?? "";
                             var link = post.link?.ToString() ?? "";
+                            var privacy = post.privacy?.value?.ToString() ?? "public";
                             
+                            // Check if this post contains the original post URL
                             if (message.Contains(postUrl) || link.Contains(postUrl))
+                            {
+                                result.HasShared = true;
+                                result.ShareUrl = post.permalink_url?.ToString() ?? "";
+                                result.ShareType = privacy;
+                                result.ShareMessage = message;
+                                result.ShareTime = DateTime.TryParse(post.created_time?.ToString(), out var shareTime) ? shareTime : null;
+                                result.ShareLikes = post.likes?.data?.Count ?? 0;
+                                result.ShareComments = post.comments?.data?.Count ?? 0;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error analyzing user share activity");
+            }
+            
+            return result;
+        }
+
+        public async Task<bool> IsUserGroupMember(string userId, string groupId, string accessToken)
+        {
+            try
+            {
+                var url = $"{_config.BaseUrl}/{groupId}/members?access_token={accessToken}";
+                var response = await _httpClient.GetAsync(url);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    var membersResponse = JsonConvert.DeserializeObject<dynamic>(content);
+                    
+                    if (membersResponse?.data != null)
+                    {
+                        foreach (var member in membersResponse.data)
+                        {
+                            if (member.id?.ToString() == userId)
                             {
                                 return true;
                             }
@@ -110,8 +239,52 @@ namespace FacebookCommentAnalyzer.API.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error checking if user shared post");
+                _logger.LogError(ex, "Error checking if user is group member");
                 return false;
+            }
+        }
+
+        public async Task<string> GetUserGroupRole(string userId, string groupId, string accessToken)
+        {
+            try
+            {
+                var url = $"{_config.BaseUrl}/{groupId}/members?fields=administrator&access_token={accessToken}";
+                var response = await _httpClient.GetAsync(url);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    var membersResponse = JsonConvert.DeserializeObject<dynamic>(content);
+                    
+                    if (membersResponse?.data != null)
+                    {
+                        foreach (var member in membersResponse.data)
+                        {
+                            if (member.id?.ToString() == userId)
+                            {
+                                if (member.administrator == true)
+                                {
+                                    return "admin";
+                                }
+                                else if (member.moderator == true)
+                                {
+                                    return "moderator";
+                                }
+                                else
+                                {
+                                    return "member";
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                return "member";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting user group role");
+                return "member";
             }
         }
 
@@ -130,12 +303,50 @@ namespace FacebookCommentAnalyzer.API.Services
             {
                 try
                 {
-                    comment.HasSharedPost = await CheckUserSharedPost(comment.From.Id, post.PermalinkUrl, accessToken);
+                    var shareAnalysis = await AnalyzeUserShareActivity(comment.From.Id, post.PermalinkUrl, accessToken);
+                    comment.HasSharedPost = shareAnalysis.HasShared;
+                    comment.ShareUrl = shareAnalysis.ShareUrl;
+                    comment.ShareType = shareAnalysis.ShareType;
+                    comment.ShareMessage = shareAnalysis.ShareMessage;
+                    comment.ShareTime = shareAnalysis.ShareTime;
                     comment.AnalysisTime = DateTime.Now;
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, $"Error analyzing comment {comment.Id}");
+                    comment.HasSharedPost = false;
+                }
+            }
+
+            return comments.OrderBy(c => c.CreatedTime).ToList();
+        }
+
+        public async Task<List<FacebookComment>> AnalyzeGroupPostCommentsAsync(string postId, string accessToken)
+        {
+            var comments = await GetGroupPostCommentsAsync(postId, accessToken);
+            var groupPost = await GetGroupPostAsync(postId, accessToken);
+            
+            if (groupPost == null)
+            {
+                return comments;
+            }
+
+            // Analyze each comment to check if user shared the post
+            foreach (var comment in comments)
+            {
+                try
+                {
+                    var shareAnalysis = await AnalyzeUserShareActivity(comment.From.Id, groupPost.PermalinkUrl, accessToken);
+                    comment.HasSharedPost = shareAnalysis.HasShared;
+                    comment.ShareUrl = shareAnalysis.ShareUrl;
+                    comment.ShareType = shareAnalysis.ShareType;
+                    comment.ShareMessage = shareAnalysis.ShareMessage;
+                    comment.ShareTime = shareAnalysis.ShareTime;
+                    comment.AnalysisTime = DateTime.Now;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, $"Error analyzing group post comment {comment.Id}");
                     comment.HasSharedPost = false;
                 }
             }

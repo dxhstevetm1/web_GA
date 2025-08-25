@@ -5,6 +5,11 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddControllersWithViews();
 builder.Services.AddHttpClient();
+
+// Configure Facebook API settings
+var facebookConfig = builder.Configuration.GetSection("FacebookApi").Get<FacebookApiConfig>();
+builder.Services.AddSingleton(facebookConfig ?? new FacebookApiConfig());
+
 builder.Services.AddScoped<IFacebookService, FacebookService>();
 
 // Add CORS

@@ -4,12 +4,14 @@
 
 ## Tính năng
 
-- 📊 Lấy thông tin bài viết Facebook
+- 📊 Lấy thông tin bài viết Facebook (cả regular posts và group posts)
 - 💬 Phân tích tất cả comment của bài viết
 - 🔍 Tìm kiếm comment theo nội dung hoặc tên người dùng
-- 📅 Sắp xếp comment theo thời gian, số like, hoặc trạng thái share
+- 📅 Sắp xếp comment theo thời gian, số like, trạng thái share, hoặc vai trò trong group
 - ✅ Kiểm tra xem người comment có share bài viết hay không
+- 🏷️ Hiển thị thông tin group membership và vai trò
 - 🎨 Giao diện đẹp và responsive
+- 🔧 Hỗ trợ cấu hình access token linh hoạt
 
 ## Cấu trúc Project
 
@@ -90,10 +92,23 @@ Frontend sẽ chạy tại: `http://localhost:5173`
 
 ### Backend API
 
+#### Regular Posts
 - `GET /api/facebook/post/{postId}` - Lấy thông tin bài viết
 - `GET /api/facebook/post/{postId}/comments` - Lấy tất cả comment
 - `GET /api/facebook/post/{postId}/analyze` - Phân tích comment và kiểm tra share
+
+#### Group Posts
+- `GET /api/facebook/group-post/{postId}` - Lấy thông tin group post
+- `GET /api/facebook/group-post/{postId}/comments` - Lấy comment với thông tin group
+- `GET /api/facebook/group-post/{postId}/analyze` - Phân tích comment group post
+
+#### User Analysis
 - `GET /api/facebook/user/{userId}/check-share` - Kiểm tra user có share bài không
+- `GET /api/facebook/user/{userId}/share-analysis` - Phân tích chi tiết share activity
+- `GET /api/facebook/group/{groupId}/member/{userId}` - Thông tin user trong group
+
+#### Configuration
+- `GET /api/facebook/config` - Kiểm tra cấu hình API
 
 ## Lưu ý quan trọng
 
@@ -101,11 +116,13 @@ Frontend sẽ chạy tại: `http://localhost:5173`
 - Cần Facebook Access Token với quyền truy cập phù hợp
 - Một số bài viết có thể không thể truy cập do cài đặt quyền riêng tư
 - Rate limiting có thể áp dụng cho API calls
+- Group posts yêu cầu group phải public hoặc user phải là member
 
 ⚠️ **Bảo mật:**
 - Không chia sẻ Access Token với người khác
 - Token có thể hết hạn, cần refresh khi cần thiết
 - Chỉ sử dụng cho mục đích phân tích hợp pháp
+- Xem file `ACCESS_TOKEN_SETUP.md` để biết cách cấu hình token an toàn
 
 ## Công nghệ sử dụng
 

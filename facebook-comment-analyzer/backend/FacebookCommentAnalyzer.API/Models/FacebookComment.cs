@@ -32,6 +32,11 @@ namespace FacebookCommentAnalyzer.API.Models
         public bool HasSharedPost { get; set; }
         public string ShareUrl { get; set; } = string.Empty;
         public DateTime AnalysisTime { get; set; } = DateTime.Now;
+        public string ShareType { get; set; } = string.Empty; // "public", "friends", "private"
+        public string ShareMessage { get; set; } = string.Empty;
+        public DateTime? ShareTime { get; set; }
+        public bool IsGroupMember { get; set; }
+        public string GroupRole { get; set; } = string.Empty; // "admin", "moderator", "member"
     }
 
     public class FacebookUser

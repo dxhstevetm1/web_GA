@@ -8,25 +8,34 @@
 
       <div class="input-section">
         <div class="form-group">
+          <label for="postType">Post Type:</label>
+          <select id="postType" v-model="postType" class="form-control">
+            <option value="regular">Regular Post</option>
+            <option value="group">Group Post</option>
+          </select>
+        </div>
+
+        <div class="form-group">
           <label for="postId">Facebook Post ID:</label>
           <input 
             id="postId"
             v-model="postId" 
             type="text" 
-            placeholder="Enter Facebook post ID (e.g., 123456789_987654321)"
+            :placeholder="postType === 'group' ? 'Enter Facebook group post ID (e.g., 123456789_987654321)' : 'Enter Facebook post ID (e.g., 123456789_987654321)'"
             class="form-control"
           />
         </div>
 
         <div class="form-group">
-          <label for="accessToken">Access Token:</label>
+          <label for="accessToken">Access Token (Optional if configured in backend):</label>
           <input 
             id="accessToken"
             v-model="accessToken" 
             type="password" 
-            placeholder="Enter Facebook access token"
+            placeholder="Enter Facebook access token (optional)"
             class="form-control"
           />
+          <small class="form-text">Leave empty if access token is configured in backend</small>
         </div>
 
         <div class="button-group">
@@ -48,6 +57,9 @@
             <div class="post-meta">
               <h4>{{ post.from.name }}</h4>
               <p>{{ formatDate(post.created_time) }}</p>
+              <p v-if="post.group" class="group-info">
+                <strong>Group:</strong> {{ post.group.name }} ({{ post.group.privacy }})
+              </p>
             </div>
           </div>
           <div class="post-content">
@@ -57,6 +69,7 @@
             <span>Likes: {{ post.likes?.data?.length || 0 }}</span>
             <span>Comments: {{ comments.length }}</span>
             <span>Shares: {{ post.shares || 0 }}</span>
+            <span v-if="post.type">Type: {{ post.type }}</span>
           </div>
         </div>
       </div>
@@ -76,6 +89,13 @@
               <option value="created_time">Sort by Date</option>
               <option value="like_count">Sort by Likes</option>
               <option value="hasSharedPost">Sort by Shared</option>
+              <option value="groupRole">Sort by Group Role</option>
+            </select>
+            <select v-model="filterBy" class="filter-select">
+              <option value="all">All Comments</option>
+              <option value="shared">Shared Post</option>
+              <option value="not_shared">Not Shared</option>
+              <option value="group_members">Group Members Only</option>
             </select>
           </div>
         </div>
@@ -85,20 +105,32 @@
             v-for="comment in filteredAndSortedComments" 
             :key="comment.id" 
             class="comment-card"
-            :class="{ 'shared-post': comment.hasSharedPost }"
+            :class="{ 
+              'shared-post': comment.hasSharedPost,
+              'group-member': comment.isGroupMember 
+            }"
           >
             <div class="comment-header">
               <img :src="comment.from.picture?.data?.url || '/default-avatar.png'" alt="Profile" class="profile-pic" />
               <div class="comment-meta">
                 <h5>{{ comment.from.name }}</h5>
                 <p>{{ formatDate(comment.created_time) }}</p>
-              </div>
-              <div class="comment-badge" v-if="comment.hasSharedPost">
-                <span class="badge shared">Shared Post</span>
+                <div class="comment-badges">
+                  <span v-if="comment.hasSharedPost" class="badge shared">Shared Post</span>
+                  <span v-if="comment.isGroupMember" class="badge member">Group Member</span>
+                  <span v-if="comment.groupRole" class="badge role">{{ comment.groupRole }}</span>
+                </div>
               </div>
             </div>
             <div class="comment-content">
               <p>{{ comment.message }}</p>
+              <div v-if="comment.hasSharedPost && comment.shareMessage" class="share-info">
+                <small><strong>Share Message:</strong> {{ comment.shareMessage }}</small>
+                <br>
+                <small><strong>Share Type:</strong> {{ comment.shareType }}</small>
+                <br>
+                <small v-if="comment.shareTime"><strong>Share Time:</strong> {{ formatDate(comment.shareTime) }}</small>
+              </div>
             </div>
             <div class="comment-stats">
               <span>👍 {{ comment.like_count }}</span>
@@ -112,17 +144,28 @@
       <div v-if="error" class="error-message">
         <p>{{ error }}</p>
       </div>
+
+      <!-- Configuration Status -->
+      <div v-if="config" class="config-section">
+        <h4>API Configuration Status</h4>
+        <div class="config-info">
+          <p><strong>Base URL:</strong> {{ config.baseUrl }}</p>
+          <p><strong>Access Token:</strong> {{ config.hasAccessToken ? 'Configured' : 'Not configured' }}</p>
+          <p><strong>App ID:</strong> {{ config.hasAppId ? 'Configured' : 'Not configured' }}</p>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { facebookService } from '../services/facebookService'
 
 export default {
   name: 'HomeView',
   setup() {
+    const postType = ref('regular')
     const postId = ref('')
     const accessToken = ref('')
     const post = ref(null)
@@ -131,6 +174,8 @@ export default {
     const error = ref('')
     const searchTerm = ref('')
     const sortBy = ref('created_time')
+    const filterBy = ref('all')
+    const config = ref(null)
 
     const filteredAndSortedComments = computed(() => {
       let filtered = comments.value
@@ -143,6 +188,19 @@ export default {
         )
       }
 
+      // Filter by type
+      switch (filterBy.value) {
+        case 'shared':
+          filtered = filtered.filter(comment => comment.hasSharedPost)
+          break
+        case 'not_shared':
+          filtered = filtered.filter(comment => !comment.hasSharedPost)
+          break
+        case 'group_members':
+          filtered = filtered.filter(comment => comment.isGroupMember)
+          break
+      }
+
       // Sort comments
       return filtered.sort((a, b) => {
         switch (sortBy.value) {
@@ -152,6 +210,9 @@ export default {
             return b.like_count - a.like_count
           case 'hasSharedPost':
             return b.hasSharedPost - a.hasSharedPost
+          case 'groupRole':
+            const roleOrder = { admin: 3, moderator: 2, member: 1 }
+            return (roleOrder[b.groupRole] || 0) - (roleOrder[a.groupRole] || 0)
           default:
             return 0
         }
@@ -159,8 +220,8 @@ export default {
     })
 
     const getPost = async () => {
-      if (!postId.value || !accessToken.value) {
-        error.value = 'Please enter both Post ID and Access Token'
+      if (!postId.value) {
+        error.value = 'Please enter Post ID'
         return
       }
 
@@ -168,7 +229,12 @@ export default {
       error.value = ''
 
       try {
-        const response = await facebookService.getPost(postId.value, accessToken.value)
+        let response
+        if (postType.value === 'group') {
+          response = await facebookService.getGroupPost(postId.value, accessToken.value || null)
+        } else {
+          response = await facebookService.getPost(postId.value, accessToken.value || null)
+        }
         post.value = response
       } catch (err) {
         error.value = err.message || 'Failed to get post information'
@@ -178,8 +244,8 @@ export default {
     }
 
     const analyzeComments = async () => {
-      if (!postId.value || !accessToken.value) {
-        error.value = 'Please enter both Post ID and Access Token'
+      if (!postId.value) {
+        error.value = 'Please enter Post ID'
         return
       }
 
@@ -187,7 +253,12 @@ export default {
       error.value = ''
 
       try {
-        const response = await facebookService.analyzeComments(postId.value, accessToken.value)
+        let response
+        if (postType.value === 'group') {
+          response = await facebookService.analyzeGroupPostComments(postId.value, accessToken.value || null)
+        } else {
+          response = await facebookService.analyzeComments(postId.value, accessToken.value || null)
+        }
         comments.value = response
       } catch (err) {
         error.value = err.message || 'Failed to analyze comments'
@@ -200,7 +271,20 @@ export default {
       return new Date(dateString).toLocaleString()
     }
 
+    const loadConfig = async () => {
+      try {
+        config.value = await facebookService.getConfig()
+      } catch (err) {
+        console.error('Failed to load config:', err)
+      }
+    }
+
+    onMounted(() => {
+      loadConfig()
+    })
+
     return {
+      postType,
       postId,
       accessToken,
       post,
@@ -209,6 +293,8 @@ export default {
       error,
       searchTerm,
       sortBy,
+      filterBy,
+      config,
       filteredAndSortedComments,
       getPost,
       analyzeComments,
@@ -271,6 +357,12 @@ export default {
   border-color: #667eea;
 }
 
+.form-text {
+  color: #7f8c8d;
+  font-size: 0.9rem;
+  margin-top: 0.25rem;
+}
+
 .button-group {
   display: flex;
   gap: 1rem;
@@ -310,7 +402,7 @@ export default {
   background: #218838;
 }
 
-.post-section, .comments-section {
+.post-section, .comments-section, .config-section {
   background: white;
   padding: 2rem;
   border-radius: 8px;
@@ -349,6 +441,11 @@ export default {
   font-size: 0.9rem;
 }
 
+.group-info {
+  color: #667eea !important;
+  font-weight: 500;
+}
+
 .post-content {
   margin-bottom: 1rem;
 }
@@ -358,6 +455,7 @@ export default {
   gap: 1rem;
   color: #7f8c8d;
   font-size: 0.9rem;
+  flex-wrap: wrap;
 }
 
 .comments-header {
@@ -375,7 +473,7 @@ export default {
   flex-wrap: wrap;
 }
 
-.search-input, .sort-select {
+.search-input, .sort-select, .filter-select {
   padding: 0.5rem;
   border: 1px solid #e1e8ed;
   border-radius: 4px;
@@ -404,6 +502,10 @@ export default {
   background-color: #f8fff9;
 }
 
+.comment-card.group-member {
+  border-right: 4px solid #667eea;
+}
+
 .comment-header {
   display: flex;
   align-items: center;
@@ -422,8 +524,11 @@ export default {
   font-size: 0.9rem;
 }
 
-.comment-badge {
-  margin-left: auto;
+.comment-badges {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .badge {
@@ -438,6 +543,16 @@ export default {
   color: white;
 }
 
+.badge.member {
+  background: #667eea;
+  color: white;
+}
+
+.badge.role {
+  background: #ffc107;
+  color: #212529;
+}
+
 .comment-content {
   margin-bottom: 1rem;
 }
@@ -445,6 +560,14 @@ export default {
 .comment-content p {
   margin: 0;
   line-height: 1.5;
+}
+
+.share-info {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background: #f8f9fa;
+  border-radius: 4px;
+  border-left: 3px solid #28a745;
 }
 
 .comment-stats {
@@ -463,6 +586,16 @@ export default {
   margin-top: 1rem;
 }
 
+.config-info {
+  background: #f8f9fa;
+  padding: 1rem;
+  border-radius: 4px;
+}
+
+.config-info p {
+  margin: 0.5rem 0;
+}
+
 @media (max-width: 768px) {
   .button-group {
     flex-direction: column;
@@ -475,6 +608,11 @@ export default {
   
   .filters {
     flex-direction: column;
+  }
+  
+  .post-stats {
+    flex-direction: column;
+    gap: 0.5rem;
   }
 }
 </style>
