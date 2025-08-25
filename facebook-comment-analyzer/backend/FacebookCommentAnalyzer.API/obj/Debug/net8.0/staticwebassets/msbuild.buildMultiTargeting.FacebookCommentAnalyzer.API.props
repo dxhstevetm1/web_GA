@@ -1,0 +1,3 @@
+﻿<Project>
+  <Import Project="../build/FacebookCommentAnalyzer.API.props" />
+</Project>

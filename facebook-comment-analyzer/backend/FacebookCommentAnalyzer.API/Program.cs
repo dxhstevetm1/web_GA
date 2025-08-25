@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using FacebookCommentAnalyzer.API.Models;
+using FacebookCommentAnalyzer.API.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,7 +12,12 @@ builder.Services.AddHttpClient();
 var facebookConfig = builder.Configuration.GetSection("FacebookApi").Get<FacebookApiConfig>();
 builder.Services.AddSingleton(facebookConfig ?? new FacebookApiConfig());
 
+// Register existing Facebook API services
 builder.Services.AddScoped<IFacebookService, FacebookService>();
+
+// Register new web scraping services
+builder.Services.AddScoped<IUrlParserService, UrlParserService>();
+builder.Services.AddScoped<IWebScrapingService, WebScrapingService>();
 
 // Add CORS
 builder.Services.AddCors(options =>

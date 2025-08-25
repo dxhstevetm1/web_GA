@@ -194,7 +194,7 @@ namespace FacebookCommentAnalyzer.API.Services
                                 result.ShareUrl = post.permalink_url?.ToString() ?? "";
                                 result.ShareType = privacy;
                                 result.ShareMessage = message;
-                                result.ShareTime = DateTime.TryParse(post.created_time?.ToString(), out var shareTime) ? shareTime : null;
+                                result.ShareTime = DateTime.TryParse(post.created_time?.ToString(), out DateTime shareTime) ? shareTime : null;
                                 result.ShareLikes = post.likes?.data?.Count ?? 0;
                                 result.ShareComments = post.comments?.data?.Count ?? 0;
                                 break;
