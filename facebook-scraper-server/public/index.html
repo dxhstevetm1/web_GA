@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facebook Comment Scraper</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            padding: 40px;
+        }
+
+        .input-section {
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .results-section {
+            display: none;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+        }
+
+        .stat-card h3 {
+            font-size: 2rem;
+            margin-bottom: 5px;
+        }
+
+        .stat-card p {
+            opacity: 0.9;
+        }
+
+        .comments-container {
+            max-height: 600px;
+            overflow-y: auto;
+            border: 1px solid #e9ecef;
+            border-radius: 10px;
+        }
+
+        .comment {
+            padding: 20px;
+            border-bottom: 1px solid #e9ecef;
+            transition: background-color 0.2s ease;
+        }
+
+        .comment:hover {
+            background-color: #f8f9fa;
+        }
+
+        .comment:last-child {
+            border-bottom: none;
+        }
+
+        .comment-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+
+        .user-name {
+            font-weight: 600;
+            color: #333;
+            text-decoration: none;
+        }
+
+        .user-name:hover {
+            color: #667eea;
+        }
+
+        .timestamp {
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+
+        .comment-text {
+            color: #333;
+            line-height: 1.6;
+            margin-bottom: 10px;
+        }
+
+        .comment-actions {
+            display: flex;
+            gap: 15px;
+        }
+
+        .action-btn {
+            background: none;
+            border: 1px solid #dee2e6;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+        }
+
+        .action-btn:hover {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .share-status {
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .shared {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .not-shared {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #f5c6cb;
+        }
+
+        .success {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #c3e6cb;
+        }
+
+        .search-section {
+            margin-bottom: 20px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+
+        .filter-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .filter-btn {
+            background: #e9ecef;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .filter-btn.active {
+            background: #667eea;
+            color: white;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .main-content {
+                padding: 20px;
+            }
+            
+            .stats {
+                grid-template-columns: 1fr;
+            }
+            
+            .comment-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1><i class="fab fa-facebook"></i> Facebook Comment Scraper</h1>
+            <p>Phân tích comment từ bài viết Facebook public</p>
+        </div>
+
+        <div class="main-content">
+            <div class="input-section">
+                <div class="input-group">
+                    <label for="postUrl">URL Bài viết Facebook:</label>
+                    <input type="url" id="postUrl" placeholder="https://www.facebook.com/username/posts/123456789" required>
+                </div>
+                <button class="btn" onclick="scrapeComments()">
+                    <i class="fas fa-search"></i>
+                    Bắt đầu Scrape
+                </button>
+            </div>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Đang xử lý... Vui lòng chờ trong giây lát</p>
+            </div>
+
+            <div class="results-section" id="resultsSection">
+                <div class="stats" id="stats"></div>
+                
+                <div class="search-section">
+                    <input type="text" class="search-input" id="searchInput" placeholder="Tìm kiếm comment...">
+                    <div class="filter-buttons">
+                        <button class="filter-btn active" onclick="filterComments('all')">Tất cả</button>
+                        <button class="filter-btn" onclick="filterComments('shared')">Đã share</button>
+                        <button class="filter-btn" onclick="filterComments('not-shared')">Chưa share</button>
+                    </div>
+                </div>
+
+                <div class="comments-container" id="commentsContainer"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let allComments = [];
+        let filteredComments = [];
+
+        async function scrapeComments() {
+            const postUrl = document.getElementById('postUrl').value.trim();
+            
+            if (!postUrl) {
+                showError('Vui lòng nhập URL bài viết Facebook');
+                return;
+            }
+
+            if (!postUrl.includes('facebook.com')) {
+                showError('URL không hợp lệ. Vui lòng nhập URL Facebook');
+                return;
+            }
+
+            showLoading(true);
+            hideResults();
+
+            try {
+                const response = await fetch('/api/scrape', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ postUrl })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    allComments = result.comments;
+                    filteredComments = [...allComments];
+                    displayResults(result);
+                    showSuccess(`Đã scrape thành công ${result.totalComments} comment`);
+                } else {
+                    showError(`Lỗi: ${result.error}`);
+                }
+            } catch (error) {
+                showError('Lỗi kết nối server');
+                console.error('Error:', error);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function displayResults(result) {
+            // Display stats
+            const statsHtml = `
+                <div class="stat-card">
+                    <h3>${result.totalComments}</h3>
+                    <p>Tổng số comment</p>
+                </div>
+                <div class="stat-card">
+                    <h3>${new Date().toLocaleDateString('vi-VN')}</h3>
+                    <p>Ngày scrape</p>
+                </div>
+                <div class="stat-card">
+                    <h3>${result.postUrl.split('/').pop()}</h3>
+                    <p>Post ID</p>
+                </div>
+            `;
+            document.getElementById('stats').innerHTML = statsHtml;
+
+            // Display comments
+            displayComments(filteredComments);
+            showResults();
+        }
+
+        function displayComments(comments) {
+            const container = document.getElementById('commentsContainer');
+            
+            if (comments.length === 0) {
+                container.innerHTML = '<div class="comment"><p>Không tìm thấy comment nào</p></div>';
+                return;
+            }
+
+            const commentsHtml = comments.map((comment, index) => `
+                <div class="comment" data-index="${index}">
+                    <div class="comment-header">
+                        <div class="user-info">
+                            <div class="user-avatar">
+                                ${comment.userName.charAt(0).toUpperCase()}
+                            </div>
+                            <a href="${comment.userProfile}" target="_blank" class="user-name">
+                                ${comment.userName}
+                            </a>
+                        </div>
+                        <div class="timestamp">${comment.timestamp}</div>
+                    </div>
+                    <div class="comment-text">${comment.text}</div>
+                    <div class="comment-actions">
+                        <button class="action-btn" onclick="checkUserShare('${comment.userProfile}', ${index})">
+                            <i class="fas fa-share"></i> Kiểm tra Share
+                        </button>
+                        <span class="share-status not-shared" id="share-status-${index}">
+                            Chưa kiểm tra
+                        </span>
+                    </div>
+                </div>
+            `).join('');
+
+            container.innerHTML = commentsHtml;
+        }
+
+        async function checkUserShare(userProfile, index) {
+            const postUrl = document.getElementById('postUrl').value;
+            const statusElement = document.getElementById(`share-status-${index}`);
+            
+            statusElement.textContent = 'Đang kiểm tra...';
+            statusElement.className = 'share-status not-shared';
+
+            try {
+                const response = await fetch('/api/check-share', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ postUrl, userProfile })
+                });
+
+                const result = await response.json();
+                
+                if (result.hasShared) {
+                    statusElement.textContent = 'Đã share';
+                    statusElement.className = 'share-status shared';
+                } else {
+                    statusElement.textContent = 'Chưa share';
+                    statusElement.className = 'share-status not-shared';
+                }
+            } catch (error) {
+                statusElement.textContent = 'Lỗi kiểm tra';
+                statusElement.className = 'share-status not-shared';
+                console.error('Error checking share:', error);
+            }
+        }
+
+        function filterComments(filter) {
+            // Update filter buttons
+            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            // Filter comments
+            switch (filter) {
+                case 'shared':
+                    filteredComments = allComments.filter(comment => {
+                        const statusElement = document.getElementById(`share-status-${allComments.indexOf(comment)}`);
+                        return statusElement && statusElement.textContent === 'Đã share';
+                    });
+                    break;
+                case 'not-shared':
+                    filteredComments = allComments.filter(comment => {
+                        const statusElement = document.getElementById(`share-status-${allComments.indexOf(comment)}`);
+                        return statusElement && statusElement.textContent === 'Chưa share';
+                    });
+                    break;
+                default:
+                    filteredComments = [...allComments];
+            }
+
+            displayComments(filteredComments);
+        }
+
+        // Search functionality
+        document.getElementById('searchInput').addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            filteredComments = allComments.filter(comment => 
+                comment.text.toLowerCase().includes(searchTerm) ||
+                comment.userName.toLowerCase().includes(searchTerm)
+            );
+            displayComments(filteredComments);
+        });
+
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+        }
+
+        function showResults() {
+            document.getElementById('resultsSection').style.display = 'block';
+        }
+
+        function hideResults() {
+            document.getElementById('resultsSection').style.display = 'none';
+        }
+
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error';
+            errorDiv.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${message}`;
+            
+            const mainContent = document.querySelector('.main-content');
+            mainContent.insertBefore(errorDiv, mainContent.firstChild);
+            
+            setTimeout(() => errorDiv.remove(), 5000);
+        }
+
+        function showSuccess(message) {
+            const successDiv = document.createElement('div');
+            successDiv.className = 'success';
+            successDiv.innerHTML = `<i class="fas fa-check-circle"></i> ${message}`;
+            
+            const mainContent = document.querySelector('.main-content');
+            mainContent.insertBefore(successDiv, mainContent.firstChild);
+            
+            setTimeout(() => successDiv.remove(), 5000);
+        }
+
+        // Enter key to submit
+        document.getElementById('postUrl').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                scrapeComments();
+            }
+        });
+    </script>
+</body>
+</html>
