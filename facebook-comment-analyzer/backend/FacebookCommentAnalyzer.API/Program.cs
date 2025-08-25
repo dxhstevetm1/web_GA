@@ -11,6 +11,7 @@ var facebookConfig = builder.Configuration.GetSection("FacebookApi").Get<Faceboo
 builder.Services.AddSingleton(facebookConfig ?? new FacebookApiConfig());
 
 builder.Services.AddScoped<IFacebookService, FacebookService>();
+builder.Services.AddScoped<IFacebookScrapeService, FacebookScrapeService>();
 
 // Add CORS
 builder.Services.AddCors(options =>

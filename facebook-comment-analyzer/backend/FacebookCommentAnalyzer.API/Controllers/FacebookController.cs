@@ -9,12 +9,14 @@ namespace FacebookCommentAnalyzer.API.Controllers
     public class FacebookController : ControllerBase
     {
         private readonly IFacebookService _facebookService;
+        private readonly IFacebookScrapeService _facebookScrapeService;
         private readonly ILogger<FacebookController> _logger;
         private readonly FacebookApiConfig _config;
 
-        public FacebookController(IFacebookService facebookService, ILogger<FacebookController> logger, FacebookApiConfig config)
+        public FacebookController(IFacebookService facebookService, IFacebookScrapeService facebookScrapeService, ILogger<FacebookController> logger, FacebookApiConfig config)
         {
             _facebookService = facebookService;
+            _facebookScrapeService = facebookScrapeService;
             _logger = logger;
             _config = config;
         }
@@ -235,6 +237,32 @@ namespace FacebookCommentAnalyzer.API.Controllers
                 HasAccessToken = !string.IsNullOrEmpty(_config.AccessToken),
                 HasAppId = !string.IsNullOrEmpty(_config.AppId)
             });
+        }
+
+        public class ScrapeRequest
+        {
+            public string PostUrl { get; set; } = string.Empty;
+            public bool CheckShare { get; set; } = false;
+        }
+
+        [HttpPost("scrape-comments")]
+        public async Task<ActionResult<List<FacebookComment>>> ScrapeComments([FromBody] ScrapeRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(request.PostUrl))
+            {
+                return BadRequest("PostUrl is required");
+            }
+
+            try
+            {
+                var result = await _facebookScrapeService.ScrapeCommentsAsync(request.PostUrl, request.CheckShare, HttpContext.RequestAborted);
+                return Ok(result.OrderBy(c => c.CreatedTime).ToList());
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error scraping comments");
+                return StatusCode(500, "Internal server error");
+            }
         }
     }
 }

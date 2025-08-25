@@ -49,6 +49,9 @@ namespace FacebookCommentAnalyzer.API.Models
 
         [JsonPropertyName("picture")]
         public FacebookPicture Picture { get; set; } = new();
+
+        // Scraping-only convenience: user's profile URL if available
+        public string ProfileUrl { get; set; } = string.Empty;
     }
 
     public class FacebookPicture
